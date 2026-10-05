@@ -1,4 +1,5 @@
 from datetime import datetime
+import os
 import re
 import fitz  # PyMuPDF
 import pandas as pd
@@ -6,10 +7,12 @@ from PIL import Image, ImageOps, ImageFilter
 import pytesseract
 import streamlit as st
 
-# === Tesseractのインストール場所を指定 ===
-pytesseract.pytesseract.tesseract_cmd = (
-    r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-)
+# === Tesseractのインストール場所の自動判別設定 ===
+# Windows（ローカル）のときだけパスを通し、クラウド（Linux）では自動でスキップします
+if os.name == "nt":
+  pytesseract.pytesseract.tesseract_cmd = (
+      r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+  )
 
 # ページ全体のレイアウトをワイドに設定
 st.set_page_config(
@@ -38,7 +41,7 @@ with tab1:
   st.write("画像ファイル、またはPDFファイルをアップロードして文字を読み取ります。")
 
   with st.expander(
-      "ℹ️ 【初めての方へ】Tesseract OCRのインストール・準備について"
+      "ℹ️️ 【初めての方へ】Tesseract OCRのインストール・準備について"
   ):
     st.markdown("""
         このOCR機能を使うには、WindowsパソコンにOCRエンジン本体のインストールが必要です。
@@ -453,51 +456,17 @@ with tab3:
                     order_no = raw_ord
 
               if not date_val:
-                m_date_2 = re.search(r"\b(\d{2})[/.-](\d{1,2})[/.-](\d{1,2})\b", line)
+                m_date_2 = re.search(
+                    r"\b(\d{2})[/.-](\d{1,2})[/.-](\d{1,2})\b", line
+                )
                 if m_date_2:
                   yy_d, mm, dd = m_date_2.groups()
                   date_val = f"20{yy_d}/{int(mm):02d}/{int(dd):02d}"
                 else:
-                  m_date_4 = re.search(r"(\d{2,4}[/年]\d{1,2}[/月]\d{1,2}日?)", line)
+                  m_date_4 = re.search(
+                      r"(\d{2,4}[/年]\d{1,2}[/月]\d{1,2}日?)", line
+                  )
                   if m_date_4:
                     date_val = m_date_4.group(1)
 
             # ★ 抽出した伝票の日付から販売管理Noを動的に生成する
-            # 例: date_val が "2026/09/05" なら、yy="26", mm="09", dd="05" → "2690905"
-            m_parsed_date = re.search(
-                r"(\d{2,4})[/年.-](\d{1,2})[/月.-](\d{1,2})", date_val
-            )
-            if m_parsed_date:
-              y_str, m_str, d_str = m_parsed_date.groups()
-              yy = y_str[-2:]  # 年の下2桁
-              mm = f"{int(m_str):02d}"  # 2桁の月
-              dd = f"{int(d_str):02d}"  # 2桁の日
-              auto_mgt_no = f"{yy}9{mm}{dd}"
-            else:
-              # 日付が万が一取れなかった場合のフォールバック（本日日付）
-              now = datetime.now()
-              auto_mgt_no = f"{now.strftime('%y')}9{now.strftime('%m%d')}"
-
-            extracted_rows.append({
-                "販売管理No": auto_mgt_no,
-                "日付": date_val,
-                "注文番号": order_no,
-                "品名": item_text if item_text else "（要確認）",
-                "数量": qty_text,
-                "単価": price_text,
-                "レコードID": "",
-                "OCR区分": "要確認",
-            })
-
-          df = pd.DataFrame(extracted_rows)
-
-          st.success("データ抽出が完了しました！（伝票日付連動型の販売管理No適用）")
-          st.dataframe(df)
-
-          csv_bytes = df.to_csv(index=False).encode("utf-8-sig")
-          st.download_button(
-              label="📥 抽出データをCSVでダウンロード",
-              data=csv_bytes,
-              file_name="invoice_date_linked_extracted_data.csv",
-              mime="text/csv",
-          )
