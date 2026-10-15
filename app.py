@@ -21,15 +21,15 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-st.title("🛠️ 業務お助けツールボックス")
+st.title("🛠️ 業務ツールボックス")
 st.write(
-    "請求書文字起こし、PDFガッチャンコ、および4連伝票対応の定型フォーマットCSV化ツール"
+    "請求書文字起こし、PDF切り取り、および4連伝票対応の定型フォーマットCSV化ツール"
 )
 
 # --- タブメニューの作成 ---
 tab1, tab2, tab3 = st.tabs([
     "📄 請求書文字起こし (画像・PDF・表対応)",
-    "✂️ カスタムトリミング＆ガッチャンコ",
+    "✂️ カスタムトリミングツール",
     "📊 4連伝票OCR ➔ CSV自動変換",
 ])
 
@@ -118,10 +118,10 @@ with tab1:
 
 
 # ==========================================
-# タブ2：カスタムトリミング付きPDFガッチャンコ
+# タブ2：カスタムトリミングツール
 # ==========================================
 with tab2:
-  st.header("✂️ カスタムトリミング＆ガッチャンコ")
+  st.header("✂️ カスタムトリミングツール")
   st.write("2つのPDFの必要な部分を指定してカスタム結合します。")
 
   col1, col2 = st.columns(2)
@@ -177,7 +177,7 @@ with tab2:
         "上下の配置比率", ["50 / 50", "40 / 60", "60 / 40"], key="custom_rat"
     )
 
-  if st.button("カスタムガッチャンコを実行！", type="primary"):
+  if st.button("カスタムツールを実行！", type="primary"):
     if pdf_top_file is not None and pdf_bottom_file is not None:
       with st.spinner("PDFをトリミング＆結合中..."):
         if "縦" in orientation:
