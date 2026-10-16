@@ -8,7 +8,6 @@ import pytesseract
 import streamlit as st
 
 # === Tesseractのインストール場所の自動判別設定 ===
-# Windows（ローカル）のときだけパスを通し、クラウド（Linux）では自動でスキップします
 if os.name == "nt":
   pytesseract.pytesseract.tesseract_cmd = (
       r"C:\Program Files\Tesseract-OCR\tesseract.exe"
@@ -41,14 +40,14 @@ with tab1:
   st.write("画像ファイル、またはPDFファイルをアップロードして文字を読み取ります。")
 
   with st.expander(
-      "ℹ️️ 【初めての方へ】Tesseract OCRのインストール・準備について"
+      "ℹ 【初めての方へ】Tesseract OCRのインストール・準備について"
   ):
     st.markdown("""
         このOCR機能を使うには、WindowsパソコンにOCRエンジン本体のインストールが必要です。
         1. 以下の公式ページからインストーラーをダウンロードしてください。
-           * **[Tesseract OCR ダウンロード元 (GitHub Wiki)](https://github.com/UB-Mannheim/tesseract/wiki)**
+            * **[Tesseract OCR ダウンロード元 (GitHub Wiki)](https://github.com/UB-Mannheim/tesseract/wiki)**
         2. インストール途中の画面で、必ず **`Japanese`（日本語言語データ）** にチェックを入れてインストールしてください。
-        3. 標準のインストール先（`C:\\Program Files\\Tesseract-OCR\\tesseract.exe`）に配置されます。
+        3. 標準のインストール先（`C:\Program Files\Tesseract-OCR\tesseract.exe`）に配置されます。
         """)
 
   uploaded_file = st.file_uploader(
@@ -118,11 +117,11 @@ with tab1:
 
 
 # ==========================================
-# タブ2：カスタムトリミングツール
+# タブ2：カスタムトリミングツール（ページ指定対応版）
 # ==========================================
 with tab2:
   st.header("✂️ カスタムトリミングツール")
-  st.write("2つのPDF（納品書/現品票）の必要な部分を指定してカスタム結合します。")
+  st.write("2つのPDF（上側・下側）の**対象ページ**と必要な部分を指定してカスタム結合します。")
 
   col1, col2 = st.columns(2)
   with col1:
@@ -135,11 +134,30 @@ with tab2:
     )
 
   st.write("---")
-  st.subheader("📐 切り抜き・レイアウト設定")
+  st.subheader("📄 ページ指定 ＆ 切り抜き・レイアウト設定")
+
+  # ページ選択のための事前読み込みチェック
+  top_total_pages = 1
+  bottom_total_pages = 1
+
+  if pdf_top_file is not None:
+    pdf_top_file.seek(0)
+    doc_t = fitz.open(stream=pdf_top_file.read(), filetype="pdf")
+    top_total_pages = len(doc_t)
+
+  if pdf_bottom_file is not None:
+    pdf_bottom_file.seek(0)
+    doc_b = fitz.open(stream=pdf_bottom_file.read(), filetype="pdf")
+    bottom_total_pages = len(doc_b)
 
   tc1, tc2 = st.columns(2)
   with tc1:
-    st.markdown("### ① 上側ファイルの切り抜き")
+    st.markdown("### ① 上側ファイルの指定")
+    top_page_idx = st.number_input(
+        "抽出するページ番号", min_value=1, max_value=top_total_pages, value=1, step=1, key="t_page"
+    )
+    st.write(f"(総ページ数: {top_total_pages} ページ)")
+    
     top_dir = st.selectbox(
         "基準位置", ["上から残す", "下から残す"], key="t_dir"
     )
@@ -153,7 +171,12 @@ with tab2:
     )
 
   with tc2:
-    st.markdown("### ② 下側ファイルの切り抜き")
+    st.markdown("### ② 下側ファイルの指定")
+    bottom_page_idx = st.number_input(
+        "抽出するページ番号", min_value=1, max_value=bottom_total_pages, value=1, step=1, key="b_page"
+    )
+    st.write(f"(総ページ数: {bottom_total_pages} ページ)")
+
     bottom_dir = st.selectbox(
         "基準位置", ["上から残す", "下から残す"], key="b_dir"
     )
@@ -179,7 +202,7 @@ with tab2:
 
   if st.button("カスタムツールを実行！", type="primary"):
     if pdf_top_file is not None and pdf_bottom_file is not None:
-      with st.spinner("PDFをトリミング＆結合中..."):
+      with st.spinner("指定ページをトリミング＆結合中..."):
         if "縦" in orientation:
           page_w, page_h = 595.27, 841.89
         else:
@@ -195,10 +218,10 @@ with tab2:
         h_top_area = page_h * split_rate
         h_bottom_area = page_h - h_top_area
 
-        def pdf_to_cropped_image(pdf_file, direction, pct):
+        def pdf_to_cropped_image(pdf_file, page_num, direction, pct):
           pdf_file.seek(0)
           doc = fitz.open(stream=pdf_file.read(), filetype="pdf")
-          page = doc[0]
+          page = doc[page_num - 1]  # 0始まりのインデックスに変換
           pix = page.get_pixmap(dpi=400)
           img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
 
@@ -213,10 +236,10 @@ with tab2:
           return img.crop(box)
 
         img_top_cropped = pdf_to_cropped_image(
-            pdf_top_file, top_dir, top_pct
+            pdf_top_file, top_page_idx, top_dir, top_pct
         )
         img_bottom_cropped = pdf_to_cropped_image(
-            pdf_bottom_file, bottom_dir, bottom_pct
+            pdf_bottom_file, bottom_page_idx, bottom_dir, bottom_pct
         )
 
         out_doc = fitz.open()
@@ -249,10 +272,10 @@ with tab2:
 
 
 # ==========================================
-# タブ3：4連伝票OCR ➔ CSV自動変換（No自動生成版）
+# タブ3：4連伝票OCR ➔ CSV自動変換
 # ==========================================
 with tab3:
-  st.header("📊 4連伝票OCR ➔ CSV自動変換 ()")
+  st.header("📊 4連伝票OCR ➔ CSV自動変換")
   st.write(
       "品名(1行目スキップ), 数量(小数第1位), 単価(ドット排除＆小数第1位), 販売管理Noに**伝票の日付**を反映して抽出します。"
   )
@@ -296,36 +319,28 @@ with tab3:
             pix = page.get_pixmap(dpi=400)
             img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
 
-            # 1. 4連伝票の上から1段目（高さの約28%）を切り出す（100%の基準）
             w, h = img.size
             block_w = w
             block_h = int(h * 0.28)
             img_top_block = img.crop((0, 0, block_w, block_h))
 
-            # 2. 座標の切り抜き範囲を設定
-            # 品名用 上下: 69.5% 〜 81.5%
             y_top_item = int(block_h * 0.695)
             y_bottom_item = int(block_h * 0.815)
-
-            # 数量・単価用 上下: 72.5% 〜 82%
             y_top_num = int(block_h * 0.725)
             y_bottom_num = int(block_h * 0.82)
 
-            # 品名: 左 1% 〜 26.5%
             box_item = (
                 int(block_w * 0.01),
                 y_top_item,
                 int(block_w * 0.265),
                 y_bottom_item,
             )
-            # 数量: 左 47% 〜 51.0%
             box_qty = (
                 int(block_w * 0.47),
                 y_top_num,
                 int(block_w * 0.51),
                 y_bottom_num,
             )
-            # 単価: 左 65% 〜 73.5%
             box_price = (
                 int(block_w * 0.65),
                 y_top_num,
@@ -337,7 +352,6 @@ with tab3:
             img_qty = img_top_block.crop(box_qty)
             img_price = img_top_block.crop(box_price)
 
-            # 品名専用（1行目スキップ関数）
             def ocr_item_skip_first_line(cropped_img):
               new_w = int(cropped_img.width * 2)
               new_h = int(cropped_img.height * 2)
@@ -364,7 +378,6 @@ with tab3:
               else:
                 return ""
 
-            # 数量整形関数（小数点第1位）
             def format_to_decimal_1(raw_str):
               clean_str = re.sub(r"[^\d.]", "", raw_str)
               if not clean_str:
@@ -375,7 +388,6 @@ with tab3:
               except ValueError:
                 return clean_str
 
-            # 単価整形関数（ドット全排除＆下1桁を小数第1位）
             def format_price_as_decimal_1(raw_str):
               clean_str = re.sub(r"[^\d]", "", raw_str)
               if not clean_str:
@@ -386,7 +398,6 @@ with tab3:
               except ValueError:
                 return clean_str
 
-            # 数量用OCR
             def ocr_qty(cropped_img):
               zoomed = cropped_img.resize(
                   (cropped_img.width * 3, cropped_img.height * 3),
@@ -409,7 +420,6 @@ with tab3:
               )
               return format_to_decimal_1(text)
 
-            # 単価用OCR
             def ocr_price(cropped_img):
               zoomed = cropped_img.resize(
                   (cropped_img.width * 3, cropped_img.height * 3),
@@ -437,7 +447,6 @@ with tab3:
             qty_text = ocr_qty(img_qty)
             price_text = ocr_price(img_price)
 
-            # ページ全体から注文番号や日付を取得
             page_full_text = pytesseract.image_to_string(
                 img_top_block.convert("L"), lang="jpn+eng", config=r"--psm 6"
             )
@@ -468,5 +477,3 @@ with tab3:
                   )
                   if m_date_4:
                     date_val = m_date_4.group(1)
-
-            # ★ 抽出した伝票の日付から販売管理Noを動的に生成する
